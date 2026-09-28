@@ -13,7 +13,7 @@
 
 <br/>
 
-**[🌐 Live Demo](https://pavankumar9d-rgb.github.io/Amazon-forest-Drone-Shots/) · [📹 16:9 Launch Video](brag-output/brag.mp4) · [📱 9:16 Recordly Reel](brag-output/recordly-reel-9x16.mp4) · [🌟 Social Media Kit](SHOWCASE.md) · [🐛 Report Bug](https://github.com/pavankumar9d-rgb/Amazon-forest-Drone-Shots/issues)**
+**[🌐 Live Website](https://amazon-forest-drone-shots.vercel.app/) · [📹 16:9 Launch Video](brag-output/brag.mp4) · [📱 9:16 Recordly Reel](brag-output/recordly-reel-9x16.mp4) · [🌟 Social Media Kit](SHOWCASE.md) · [🐛 Report Bug](https://github.com/pavankumar9d-rgb/Amazon-forest-Drone-Shots/issues)**
 
 </div>
 
