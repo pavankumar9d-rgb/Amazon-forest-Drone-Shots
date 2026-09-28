@@ -49,8 +49,6 @@ brag-output/composition/
 test_*.jpg
 corner*.png
 
-# Raw sequence frames (236MB — too large for GitHub)
-assests/
 
 # Agent config
 CLAUDE.md
