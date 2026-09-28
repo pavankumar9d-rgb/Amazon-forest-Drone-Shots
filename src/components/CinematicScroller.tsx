@@ -294,7 +294,7 @@ export default function CinematicScroller() {
         {/* Full 1080p Master Video Element - object-cover ensures proper framing on mobile portrait, tablets, & ultrawides */}
         <video
           ref={videoRef}
-          src="/amazon-80s-master.mp4"
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/amazon-80s-web.mp4`}
           preload="auto"
           muted
           playsInline
