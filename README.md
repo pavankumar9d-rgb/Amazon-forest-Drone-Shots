@@ -19,31 +19,23 @@
 
 ---
 
-## 🎥 Project Showcase Videos
+## 🎥 Live Project Video Showcase
 
-<table>
+<table width="100%">
   <tr>
     <td width="62%" align="center" valign="top">
-      <h3>🎬 16:9 Cinematic Launch Video</h3>
-      <p><em>Full flight walkthrough with HUD telemetry & sound (Desktop / YouTube)</em></p>
-      <video src="brag-output/brag.mp4" controls width="100%" poster="brag-output/brag.jpg"></video>
+      <h3>🎬 16:9 Cinematic Launch Flight</h3>
+      <p><em>Full 1080p scroll scrubbing with flight HUD telemetry & sound</em></p>
+      <img src="brag-output/brag-launch.gif" width="100%" alt="AMAZONIA 16:9 Launch Video" />
       <br/><br/>
-      <a href="brag-output/brag.mp4">
-        <img src="brag-output/brag.jpg" width="100%" alt="Watch 16:9 Launch Video">
-      </a>
-      <br/>
-      <a href="brag-output/brag.mp4">▶ <strong>Watch 16:9 Fullscreen Video (20s)</strong></a>
+      <a href="brag-output/brag.mp4">▶ <strong>Watch Full 1080p Master Video with Sound (20s)</strong></a>
     </td>
     <td width="38%" align="center" valign="top">
       <h3>📱 9:16 Recordly Showcase Reel</h3>
-      <p><em>Framed mobile mockup (Instagram Reels / Shorts)</em></p>
-      <video src="brag-output/recordly-reel-9x16.mp4" controls width="100%" poster="brag-output/recordly-reel-poster.jpg"></video>
+      <p><em>Framed mobile mockup for Instagram Reels & YouTube Shorts</em></p>
+      <img src="brag-output/recordly-reel.gif" width="100%" alt="AMAZONIA 9:16 Recordly Reel" />
       <br/><br/>
-      <a href="brag-output/recordly-reel-9x16.mp4">
-        <img src="brag-output/recordly-reel-poster.jpg" width="100%" alt="Watch 9:16 Recordly Reel">
-      </a>
-      <br/>
-      <a href="brag-output/recordly-reel-9x16.mp4">▶ <strong>Watch 9:16 Vertical Reel (20s)</strong></a>
+      <a href="brag-output/recordly-reel-9x16.mp4">▶ <strong>Watch Full 1080p Vertical Reel with Sound (20s)</strong></a>
     </td>
   </tr>
 </table>
