@@ -44,7 +44,6 @@ public/amazon-80s-fast.mp4
 
 # Build artifacts
 brag-output/composition/
-brag-output/brag.mp4
 
 # Test artifacts
 test_*.jpg

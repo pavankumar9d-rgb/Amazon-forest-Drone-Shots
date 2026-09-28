@@ -4,9 +4,18 @@
 
 ### A scroll-driven cinematic journey through the Amazon rainforest
 
-![Preview](public/preview.jpg)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Lenis](https://img.shields.io/badge/Lenis-Scroll-10B981?style=for-the-badge)](https://lenis.darkroom.engineering/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-**[🔗 Live Demo](#) · [📹 Launch Video](brag-output/brag.mp4) · [🐛 Report Bug](https://github.com/pavankumar9d-rgb/Amazon-forest-Drone-Shots/issues)**
+<br/>
+
+![AMAZONIA Preview](public/preview.jpg)
+
+**[📹 Launch Video](brag-output/brag.mp4) · [🌟 Social Media Kit](SHOWCASE.md) · [🐛 Report Bug](https://github.com/pavankumar9d-rgb/Amazon-forest-Drone-Shots/issues)**
 
 </div>
 
