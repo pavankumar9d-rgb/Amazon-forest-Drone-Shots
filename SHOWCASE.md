@@ -127,6 +127,11 @@ Feedback and stars are always appreciated! 🚀
 
 ## 🎬 4. Ready-to-Use Video Assets in this Repo
 
-- **Launch Video**: `brag-output/brag.mp4` (20s high-def 1080p showcase video with motion graphics and titles)
-- **Cover Image / Poster**: `brag-output/brag.jpg` and `public/preview.jpg`
-- **Short Copy**: `brag-output/share-copy.txt`
+| Asset | Format | Purpose | File Path |
+|-------|--------|---------|-----------|
+| **Recordly Showcase Reel** | 9:16 Vertical (1080×1920) | Instagram Reels, YouTube Shorts, TikTok | [`brag-output/recordly-reel-9x16.mp4`](file:///c:/Users/saipa/OneDrive/Desktop/amazon/brag-output/recordly-reel-9x16.mp4) |
+| **Reel Cover / Poster** | 9:16 Vertical (1080×1920) | Reel thumbnail & story preview | [`brag-output/recordly-reel-poster.jpg`](file:///c:/Users/saipa/OneDrive/Desktop/amazon/brag-output/recordly-reel-poster.jpg) |
+| **Cinematic Launch Video** | 16:9 Widescreen (1920×1080) | YouTube Long-Form, Twitter/X, Portfolio | [`brag-output/brag.mp4`](file:///c:/Users/saipa/OneDrive/Desktop/amazon/brag-output/brag.mp4) |
+| **16:9 Poster Frame** | 16:9 Landscape (1920×1080) | YouTube thumbnail & README hero | [`brag-output/brag.jpg`](file:///c:/Users/saipa/OneDrive/Desktop/amazon/brag-output/brag.jpg) / [`public/preview.jpg`](file:///c:/Users/saipa/OneDrive/Desktop/amazon/public/preview.jpg) |
+| **Social Captions** | Markdown / Text | Quick copy-paste captions & hashtags | [`brag-output/share-copy.txt`](file:///c:/Users/saipa/OneDrive/Desktop/amazon/brag-output/share-copy.txt) |
+

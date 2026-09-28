@@ -15,7 +15,7 @@
 
 ![AMAZONIA Preview](public/preview.jpg)
 
-**[📹 Launch Video](brag-output/brag.mp4) · [🌟 Social Media Kit](SHOWCASE.md) · [🐛 Report Bug](https://github.com/pavankumar9d-rgb/Amazon-forest-Drone-Shots/issues)**
+**[📹 16:9 Launch Video](brag-output/brag.mp4) · [📱 9:16 Recordly Reel](brag-output/recordly-reel-9x16.mp4) · [🌟 Social Media Kit](SHOWCASE.md) · [🐛 Report Bug](https://github.com/pavankumar9d-rgb/Amazon-forest-Drone-Shots/issues)**
 
 </div>
 
@@ -125,10 +125,12 @@ amazonia/
 │   │   └── CustomCursor.tsx        # Custom crosshair cursor
 │   └── data/
 │       └── milestones.ts       # Sequence metadata & coordinates
-├── brag-output/                # Launch video assets
-│   ├── brag.mp4                # 20s cinematic launch video
-│   ├── brag.jpg                # Poster frame / thumbnail
-│   └── share-copy.txt          # Social media caption
+├── brag-output/                # Launch & social showcase video assets
+│   ├── brag.mp4                # 16:9 Widescreen launch video (YouTube/Desktop)
+│   ├── recordly-reel-9x16.mp4  # 9:16 Vertical showcase reel (Instagram/Shorts/TikTok)
+│   ├── recordly-reel-poster.jpg# Reel cover image
+│   ├── brag.jpg                # 16:9 Video poster frame / thumbnail
+│   └── share-copy.txt          # Social media captions
 └── assests/                    # Raw sequence reference frames
 ```
 
