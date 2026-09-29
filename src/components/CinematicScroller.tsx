@@ -17,9 +17,18 @@ if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
 }
 
+const TOTAL_FRAMES = 300;
+const getFramePath = (index: number) => {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
+  const num = String(Math.max(1, Math.min(TOTAL_FRAMES, index + 1))).padStart(3, "0");
+  return `${base}/frames/frame_${num}.webp`;
+};
+
 export default function CinematicScroller() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imagesRef = useRef<HTMLImageElement[]>([]);
+  const currentFrameRef = useRef(0);
 
   const [progress, setProgress] = useState(0);
   const [currentMilestone, setCurrentMilestone] = useState<Milestone>(MILESTONES[0]);
@@ -28,11 +37,9 @@ export default function CinematicScroller() {
   const [compassHeading, setCompassHeading] = useState("284° WNW");
   const [airSpeed, setAirSpeed] = useState(48);
 
-  const targetTimeRef = useRef(0);
   const currentMilestoneRef = useRef<Milestone>(MILESTONES[0]);
   const lastStateUpdateProgRef = useRef(0);
   const lenisRef = useRef<Lenis | null>(null);
-  const rafIdRef = useRef<number | null>(null);
 
   const handlePreloaderComplete = useCallback(() => {
     setPreloaderComplete(true);
@@ -84,20 +91,118 @@ export default function CinematicScroller() {
     );
   }, []);
 
-  // Initialize Lenis + High Performance Video Scrubber Loop (Desktop, Tablet, Mobile)
+  // High-performance Canvas draw with smart nearest-frame fallback
+  const drawFrame = useCallback((frameIdx: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return;
+
+    // Find requested or nearest available loaded frame
+    let img = imagesRef.current[frameIdx];
+    if (!img?.complete || !img.naturalWidth) {
+      for (let offset = 1; offset < 20; offset++) {
+        const prev = imagesRef.current[frameIdx - offset];
+        if (prev?.complete && prev.naturalWidth) {
+          img = prev;
+          break;
+        }
+        const next = imagesRef.current[frameIdx + offset];
+        if (next?.complete && next.naturalWidth) {
+          img = next;
+          break;
+        }
+      }
+    }
+
+    if (!img?.complete || !img.naturalWidth) return;
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const scale = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
+    const w = img.naturalWidth * scale;
+    const h = img.naturalHeight * scale;
+    const x = (cw - w) / 2;
+    const y = (ch - h) / 2;
+
+    ctx.drawImage(img, x, y, w, h);
+  }, []);
+
+  // Initialize Canvas, Image Sequence Preloader, Lenis Smooth Scroll, and GSAP ScrollTrigger
   useEffect(() => {
-    // 1. Initialize Lenis Smooth Scroll with responsive curves for touch and wheel
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    // 1. High DPI Resize Handler
+    const handleResize = () => {
+      if (!canvas) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      drawFrame(currentFrameRef.current);
+    };
+
+    window.addEventListener("resize", handleResize);
+    handleResize();
+
+    // 2. Progressive Frame Preload
+    // Allocate array
+    imagesRef.current = new Array(TOTAL_FRAMES);
+
+    // Load first frame immediately for zero-delay visual display
+    const firstImg = new Image();
+    firstImg.src = getFramePath(0);
+    firstImg.onload = () => {
+      imagesRef.current[0] = firstImg;
+      drawFrame(0);
+    };
+
+    // Priority load: keyframes first (every 5th frame) for rapid responsive scrub
+    for (let i = 0; i < TOTAL_FRAMES; i += 5) {
+      if (i === 0) continue;
+      const img = new Image();
+      img.src = getFramePath(i);
+      img.onload = () => {
+        imagesRef.current[i] = img;
+        if (currentFrameRef.current === i) {
+          drawFrame(i);
+        }
+      };
+    }
+
+    // Full load: load all remaining frames
+    const loadRemaining = () => {
+      for (let i = 0; i < TOTAL_FRAMES; i++) {
+        if (imagesRef.current[i]) continue;
+        const img = new Image();
+        img.src = getFramePath(i);
+        img.onload = () => {
+          imagesRef.current[i] = img;
+          if (currentFrameRef.current === i) {
+            drawFrame(i);
+          }
+        };
+      }
+    };
+
+    if ("requestIdleCallback" in window) {
+      (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(loadRemaining);
+    } else {
+      setTimeout(loadRemaining, 100);
+    }
+
+    // 3. Lenis Butter-Smooth Scrolling Engine
     let lenis: Lenis | null = null;
     try {
       lenis = new Lenis({
-        duration: 0.75,
+        duration: 0.9,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         orientation: "vertical",
         gestureOrientation: "vertical",
         smoothWheel: true,
-        wheelMultiplier: 1.05,
-        touchMultiplier: 1.5,
-        syncTouch: true,
+        wheelMultiplier: 1.0,
+        touchMultiplier: 1.3,
       });
       lenisRef.current = lenis;
 
@@ -110,113 +215,88 @@ export default function CinematicScroller() {
       // Native fallback
     }
 
-    // 2. Direct Scroll Handler - Updates ref immediately, updates React UI throttled
-    const handleScrollUpdate = () => {
-      if (!containerRef.current) return;
-      const totalScroll = containerRef.current.offsetHeight - window.innerHeight;
-      if (totalScroll <= 0) return;
+    // 4. GSAP ScrollTrigger Frame Scrubber with Damped Scrub
+    const st = ScrollTrigger.create({
+      trigger: container,
+      start: "top top",
+      end: "bottom bottom",
+      scrub: 0.35, // Butter-smooth momentum interpolation
+      onUpdate(self) {
+        const prog = self.progress;
 
-      const prog = Math.max(0, Math.min(1, window.scrollY / totalScroll));
-      // 80 seconds master flight target timestamp
-      targetTimeRef.current = prog * 79.92;
-
-      // Only re-render React state if progress changed significantly (> 0.0025) or milestone changed
-      const m = getMilestoneForProgress(prog);
-      const milestoneChanged = m.id !== currentMilestoneRef.current.id;
-      const progDiff = Math.abs(prog - lastStateUpdateProgRef.current);
-
-      if (milestoneChanged || progDiff > 0.0025) {
-        lastStateUpdateProgRef.current = prog;
-        setProgress(prog);
-
-        if (milestoneChanged) {
-          currentMilestoneRef.current = m;
-          setCurrentMilestone(m);
-          updateAmbientLighting(prog, m);
+        // Advance canvas frame with instantaneous hardware draw
+        const targetFrame = Math.min(TOTAL_FRAMES - 1, Math.floor(prog * (TOTAL_FRAMES - 1)));
+        if (targetFrame !== currentFrameRef.current) {
+          currentFrameRef.current = targetFrame;
+          drawFrame(targetFrame);
         }
 
-        const headings = [
-          "284° WNW",
-          "296° WNW",
-          "312° NW",
-          "042° NE",
-          "118° ESE",
-          "195° SSW",
-          "270° W",
-          "340° NNW",
-        ];
-        const headingIdx = Math.min(headings.length - 1, Math.floor(prog * 8));
-        setCompassHeading(headings[headingIdx]);
-        setAirSpeed(Math.round(44 + Math.sin(prog * 20) * 8));
+        // Throttle React state updates to avoid React render churn
+        const m = getMilestoneForProgress(prog);
+        const milestoneChanged = m.id !== currentMilestoneRef.current.id;
+        const progDiff = Math.abs(prog - lastStateUpdateProgRef.current);
+
+        if (milestoneChanged || progDiff > 0.003) {
+          lastStateUpdateProgRef.current = prog;
+          setProgress(prog);
+
+          if (milestoneChanged) {
+            currentMilestoneRef.current = m;
+            setCurrentMilestone(m);
+            updateAmbientLighting(prog, m);
+          }
+
+          const headings = [
+            "284° WNW",
+            "296° WNW",
+            "312° NW",
+            "042° NE",
+            "118° ESE",
+            "195° SSW",
+            "270° W",
+            "340° NNW",
+          ];
+          const headingIdx = Math.min(headings.length - 1, Math.floor(prog * 8));
+          setCompassHeading(headings[headingIdx]);
+          setAirSpeed(Math.round(44 + Math.sin(prog * 20) * 8));
+        }
+      },
+    });
+
+    // 5. Keyboard Navigation Shortcuts (Arrow keys, Space, PageUp, PageDown)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!containerRef.current) return;
+      const totalHeight = containerRef.current.offsetHeight - window.innerHeight;
+      const step = window.innerHeight * 0.8;
+
+      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
+        e.preventDefault();
+        const targetY = Math.min(totalHeight, window.scrollY + step);
+        if (lenisRef.current) {
+          lenisRef.current.scrollTo(targetY, { duration: 0.8 });
+        } else {
+          window.scrollTo({ top: targetY, behavior: "smooth" });
+        }
+      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+        e.preventDefault();
+        const targetY = Math.max(0, window.scrollY - step);
+        if (lenisRef.current) {
+          lenisRef.current.scrollTo(targetY, { duration: 0.8 });
+        } else {
+          window.scrollTo({ top: targetY, behavior: "smooth" });
+        }
       }
     };
 
-    window.addEventListener("scroll", handleScrollUpdate, { passive: true });
-    handleScrollUpdate();
-
-    // 3. Ultra-Smooth Synchronized rAF Video Scrubber (Direct frame lock with zero oscillation)
-    const video = videoRef.current;
-    if (video) {
-      video.load();
-
-      const renderLoop = () => {
-        if (video && video.readyState >= 1) {
-          const target = targetTimeRef.current;
-          const diff = Math.abs(target - video.currentTime);
-
-          // Update frame cleanly when diff exceeds half a frame (~0.02s at 24fps)
-          if (diff > 0.015 && !video.seeking) {
-            try {
-              video.currentTime = target;
-            } catch {}
-          }
-        }
-        rafIdRef.current = requestAnimationFrame(renderLoop);
-      };
-
-      rafIdRef.current = requestAnimationFrame(renderLoop);
-
-      // 4. Keyboard Navigation Shortcuts (Arrow keys, Space, PageUp, PageDown)
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (!containerRef.current) return;
-        const totalHeight = containerRef.current.offsetHeight - window.innerHeight;
-        const step = window.innerHeight * 0.8;
-
-        if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
-          e.preventDefault();
-          const targetY = Math.min(totalHeight, window.scrollY + step);
-          if (lenisRef.current) {
-            lenisRef.current.scrollTo(targetY, { duration: 0.8 });
-          } else {
-            window.scrollTo({ top: targetY, behavior: "smooth" });
-          }
-        } else if (e.key === "ArrowUp" || e.key === "PageUp") {
-          e.preventDefault();
-          const targetY = Math.max(0, window.scrollY - step);
-          if (lenisRef.current) {
-            lenisRef.current.scrollTo(targetY, { duration: 0.8 });
-          } else {
-            window.scrollTo({ top: targetY, behavior: "smooth" });
-          }
-        }
-      };
-
-      window.addEventListener("keydown", handleKeyDown);
-
-      return () => {
-        window.removeEventListener("scroll", handleScrollUpdate);
-        window.removeEventListener("keydown", handleKeyDown);
-        if (lenis) lenis.destroy();
-        if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-      };
-    }
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener("scroll", handleScrollUpdate);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("keydown", handleKeyDown);
+      st.kill();
       if (lenis) lenis.destroy();
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     };
-  }, [getMilestoneForProgress, updateAmbientLighting]);
+  }, [drawFrame, getMilestoneForProgress, updateAmbientLighting]);
 
   // Navigate directly to milestone with Lenis smooth interpolation
   const navigateToMilestone = useCallback((milestone: Milestone) => {
@@ -291,14 +371,10 @@ export default function CinematicScroller() {
 
       {/* Fullscreen Master Screen - Fixed to dynamic viewport across all device aspect ratios */}
       <div className="fixed inset-0 h-[100dvh] w-full overflow-hidden select-none z-10">
-        {/* Full 1080p Master Video Element - object-cover ensures proper framing on mobile portrait, tablets, & ultrawides */}
-        <video
-          ref={videoRef}
-          src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/amazon-80s-web.mp4`}
-          preload="auto"
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover origin-center pointer-events-none brightness-[0.98] contrast-[1.03]"
+        {/* High-Performance Canvas Scrubber: Instantaneous 60-120fps hardware draw, zero video seek latency */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none brightness-[0.98] contrast-[1.03]"
         />
 
         {/* Dynamic Color Grade Vignette Overlay (warms up during sunset, biolum during night) */}
@@ -358,7 +434,7 @@ export default function CinematicScroller() {
               </div>
               <div>
                 <span className="text-[#F7F4EC]/40">BIOME: </span>
-                <span className="text-[#F7F4EC] uppercase">{currentMilestone.biome.split("·")[0]}</span>
+                <span className="text-[#F7F4EC] uppercase">{currentMilestone.biome.split("—")[0]}</span>
               </div>
             </div>
           </div>
@@ -378,7 +454,7 @@ export default function CinematicScroller() {
                 <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-0.5 sm:py-1 rounded-full border border-[#F7F4EC]/15 glass-panel bg-[#0A0F0A]/50">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#4FD1B8]" />
                   <span className="font-mono text-[8px] sm:text-[10px] tracking-widest uppercase text-[#F7F4EC]/75">
-                    PHASE 0{currentMilestone.id} · {currentMilestone.name}
+                    PHASE 0{currentMilestone.id} — {currentMilestone.name}
                   </span>
                 </div>
 
@@ -443,26 +519,31 @@ export default function CinematicScroller() {
 
           {/* Bottom HUD: Coordinates & Waypoint Jumper */}
           <div className="w-full flex items-center justify-between gap-2 sm:gap-4 text-[9px] sm:text-xs font-mono text-[#F7F4EC]/60 border-t border-[#F7F4EC]/10 pt-2 sm:pt-3">
-            {/* Left HUD Coordinates (Visible on tablet/desktop) */}
-            <div className="hidden md:block space-y-0.5">
-              <div className="text-[#F7F4EC]/40 text-[9px] uppercase tracking-wider">Coordinates</div>
-              <div className="text-[#F7F4EC] font-mono">{currentMilestone.coordinates}</div>
-              <div className="text-[#4FD1B8] text-[9px]">{currentMilestone.altitude}</div>
+            {/* Left Coordinates & Altitude */}
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-[#4FD1B8]">●</span>
+                <span className="text-[#F7F4EC] font-semibold tracking-wider">
+                  {currentMilestone.coordinates}
+                </span>
+              </div>
+              <div className="text-[#F7F4EC]/40 text-[8px] sm:text-[10px]">
+                {currentMilestone.altitude} · {currentMilestone.biome}
+              </div>
             </div>
 
-            {/* Center Quick Waypoint Navigation Ribbon (Adaptive size for mobile, tablet & desktop) */}
-            <div className="flex items-center gap-1 sm:gap-1.5 pointer-events-auto overflow-x-auto max-w-[calc(100vw-4.5rem)] sm:max-w-none px-1.5 sm:px-2 py-0.5 sm:py-1 glass-panel rounded-full bg-[#0A0F0A]/75 border border-[#F7F4EC]/10 mx-auto md:mx-0">
+            {/* Center Quick Waypoint Buttons */}
+            <div className="flex items-center gap-1 sm:gap-1.5 pointer-events-auto overflow-x-auto max-w-[200px] sm:max-w-none py-1">
               {MILESTONES.map((m) => {
                 const isActive = currentMilestone.id === m.id;
                 return (
                   <button
                     key={m.id}
                     onClick={() => navigateToMilestone(m)}
-                    title={m.name}
-                    className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[8px] sm:text-[9px] font-mono transition-all cursor-pointer ${
+                    className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[8px] sm:text-[10px] font-mono uppercase tracking-wider transition-all duration-200 cursor-pointer ${
                       isActive
-                        ? "bg-[#4FD1B8] text-[#0A0F0A] font-bold shadow-[0_0_12px_#4FD1B8]"
-                        : "text-[#F7F4EC]/60 hover:text-[#F7F4EC] hover:bg-[#F7F4EC]/10"
+                        ? "bg-[#4FD1B8] text-[#0A0F0A] font-bold shadow-[0_0_12px_rgba(79,209,184,0.4)]"
+                        : "bg-[#0A0F0A]/50 text-[#F7F4EC]/50 hover:text-[#F7F4EC] hover:bg-[#F7F4EC]/10 border border-[#F7F4EC]/10"
                     }`}
                     data-magnetic
                   >

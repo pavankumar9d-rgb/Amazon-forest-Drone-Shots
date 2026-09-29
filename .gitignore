@@ -41,6 +41,9 @@ next-env.d.ts
 # Large video assets (too big for GitHub — download separately)
 public/amazon-80s-master.mp4
 public/amazon-80s-fast.mp4
+public/amazon-80s-web.mp4
+*.mp4
+!brag-output/brag.mp4
 
 # Build artifacts
 brag-output/composition/
@@ -53,3 +56,15 @@ corner*.png
 # Agent config
 CLAUDE.md
 AGENTS.md
+
+# Temporary and local scratch files
+scratch/
+website-screen-recording/
+smooth_frames/
+scratch_*
+*.py
+*.mjs
+*.jpg
+*.webp
+!public/frames/*.webp
+
