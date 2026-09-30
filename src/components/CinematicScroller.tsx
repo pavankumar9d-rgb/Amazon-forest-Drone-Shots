@@ -18,17 +18,25 @@ if (typeof window !== "undefined") {
 }
 
 const TOTAL_FRAMES = 300;
+
+// Resolve frame path to standardized frame-001.png through frame-300.png
 const getFramePath = (index: number) => {
   const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
   const num = String(Math.max(1, Math.min(TOTAL_FRAMES, index + 1))).padStart(3, "0");
-  return `${base}/frames/frame_${num}.webp`;
+  return `${base}/frames/frame-${num}.png`;
 };
 
 export default function CinematicScroller() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
-  const currentFrameRef = useRef(0);
+
+  // Persistent rAF lerp refs
+  const targetFrameRef = useRef<number>(0);
+  const currentFrameRef = useRef<number>(0);
+  const renderedFrameRef = useRef<number>(-1);
+  const needsRedrawRef = useRef<boolean>(true);
+  const prefersReducedMotionRef = useRef<boolean>(false);
 
   const [progress, setProgress] = useState(0);
   const [currentMilestone, setCurrentMilestone] = useState<Milestone>(MILESTONES[0]);
@@ -91,17 +99,17 @@ export default function CinematicScroller() {
     );
   }, []);
 
-  // High-performance Canvas draw with smart nearest-frame fallback
+  // High-performance Canvas draw with smart nearest-frame fallback & retina DPR cover
   const drawFrame = useCallback((frameIdx: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    // Find requested or nearest available loaded frame
+    // Find requested or nearest available loaded frame (scans up to 25 neighbors)
     let img = imagesRef.current[frameIdx];
     if (!img?.complete || !img.naturalWidth) {
-      for (let offset = 1; offset < 20; offset++) {
+      for (let offset = 1; offset < 25; offset++) {
         const prev = imagesRef.current[frameIdx - offset];
         if (prev?.complete && prev.naturalWidth) {
           img = prev;
@@ -125,74 +133,187 @@ export default function CinematicScroller() {
     const x = (cw - w) / 2;
     const y = (ch - h) / 2;
 
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.drawImage(img, x, y, w, h);
   }, []);
 
-  // Initialize Canvas, Image Sequence Preloader, Lenis Smooth Scroll, and GSAP ScrollTrigger
+  // Initialize Canvas, Preloader, Lerp Animation Loop, Lenis, and ScrollTrigger
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    // 1. High DPI Resize Handler
+    // 1. Accessibility: Detect prefers-reduced-motion
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    prefersReducedMotionRef.current = mediaQuery.matches;
+    const handleMotionChange = (e: MediaQueryListEvent) => {
+      prefersReducedMotionRef.current = e.matches;
+    };
+    mediaQuery.addEventListener("change", handleMotionChange);
+
+    // 2. High-DPI Responsive Canvas Setup
     const handleResize = () => {
       if (!canvas) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = window.innerWidth * dpr;
       canvas.height = window.innerHeight * dpr;
-      drawFrame(currentFrameRef.current);
+      needsRedrawRef.current = true;
     };
 
     window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
     handleResize();
 
-    // 2. Progressive Frame Preload
-    // Allocate array
+    // 3. Progressive Frame Preload (frame-001.png to frame-300.png)
     imagesRef.current = new Array(TOTAL_FRAMES);
 
-    // Load first frame immediately for zero-delay visual display
+    const loadSingleImage = (index: number) => {
+      if (imagesRef.current[index]) return;
+      const img = new Image();
+      img.src = getFramePath(index);
+      img.onload = () => {
+        imagesRef.current[index] = img;
+        if (Math.round(currentFrameRef.current) === index) {
+          needsRedrawRef.current = true;
+        }
+      };
+      img.onerror = () => {
+        // Resilient fallback to webp sequence if png is unavailable
+        const fallback = new Image();
+        const num = String(index + 1).padStart(3, "0");
+        fallback.src = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/frames/frame_${num}.webp`;
+        fallback.onload = () => {
+          imagesRef.current[index] = fallback;
+          if (Math.round(currentFrameRef.current) === index) {
+            needsRedrawRef.current = true;
+          }
+        };
+      };
+    };
+
+    // Frame 1 (frame-001.png) loaded immediately for instantaneous zero-delay first paint
     const firstImg = new Image();
     firstImg.src = getFramePath(0);
     firstImg.onload = () => {
       imagesRef.current[0] = firstImg;
+      needsRedrawRef.current = true;
       drawFrame(0);
     };
+    firstImg.onerror = () => {
+      // Fallback
+      const fb = new Image();
+      fb.src = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/frames/frame_001.webp`;
+      fb.onload = () => {
+        imagesRef.current[0] = fb;
+        needsRedrawRef.current = true;
+        drawFrame(0);
+      };
+    };
 
-    // Priority load: keyframes first (every 5th frame) for rapid responsive scrub
+    // Priority load: keyframes every 5th frame for instantaneous responsive scrub
     for (let i = 0; i < TOTAL_FRAMES; i += 5) {
       if (i === 0) continue;
-      const img = new Image();
-      img.src = getFramePath(i);
-      img.onload = () => {
-        imagesRef.current[i] = img;
-        if (currentFrameRef.current === i) {
-          drawFrame(i);
-        }
-      };
+      loadSingleImage(i);
     }
 
-    // Full load: load all remaining frames
+    // Idle load: all remaining frames
     const loadRemaining = () => {
       for (let i = 0; i < TOTAL_FRAMES; i++) {
-        if (imagesRef.current[i]) continue;
-        const img = new Image();
-        img.src = getFramePath(i);
-        img.onload = () => {
-          imagesRef.current[i] = img;
-          if (currentFrameRef.current === i) {
-            drawFrame(i);
-          }
-        };
+        if (!imagesRef.current[i]) {
+          loadSingleImage(i);
+        }
       }
     };
 
     if ("requestIdleCallback" in window) {
       (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(loadRemaining);
     } else {
-      setTimeout(loadRemaining, 100);
+      setTimeout(loadRemaining, 60);
     }
 
-    // 3. Lenis Butter-Smooth Scrolling Engine
+    // 4. Persistent requestAnimationFrame Animation Loop with Smooth Interpolation / Lerp
+    let rafId: number;
+    const renderLoop = () => {
+      const target = targetFrameRef.current;
+      const current = currentFrameRef.current;
+      const isReduced = prefersReducedMotionRef.current;
+
+      if (isReduced) {
+        currentFrameRef.current = target;
+      } else {
+        const diff = target - current;
+        if (Math.abs(diff) > 0.001) {
+          // Smooth lerp factor (0.14 provides luxurious, Apple-level inertia)
+          currentFrameRef.current += diff * 0.14;
+        } else {
+          currentFrameRef.current = target;
+        }
+      }
+
+      const targetInt = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(currentFrameRef.current)));
+
+      // Redraw whenever the target frame changes OR canvas flagged for redraw
+      if (targetInt !== renderedFrameRef.current || needsRedrawRef.current) {
+        renderedFrameRef.current = targetInt;
+        needsRedrawRef.current = false;
+        drawFrame(targetInt);
+      }
+
+      rafId = requestAnimationFrame(renderLoop);
+    };
+
+    rafId = requestAnimationFrame(renderLoop);
+
+    // 5. Scroll Progress Calculation & UI Telemetry Updates
+    const handleScrollUpdate = (prog: number) => {
+      // Map 0% scroll -> frame 1 (index 0), 100% scroll -> frame 300 (index 299)
+      const mappedTarget = Math.max(0, Math.min(TOTAL_FRAMES - 1, prog * (TOTAL_FRAMES - 1)));
+      targetFrameRef.current = mappedTarget;
+
+      // Throttle React state updates to avoid unnecessary render churn
+      const m = getMilestoneForProgress(prog);
+      const milestoneChanged = m.id !== currentMilestoneRef.current.id;
+      const progDiff = Math.abs(prog - lastStateUpdateProgRef.current);
+
+      if (milestoneChanged || progDiff > 0.003) {
+        lastStateUpdateProgRef.current = prog;
+        setProgress(prog);
+
+        if (milestoneChanged) {
+          currentMilestoneRef.current = m;
+          setCurrentMilestone(m);
+          updateAmbientLighting(prog, m);
+        }
+
+        const headings = [
+          "284° WNW",
+          "296° WNW",
+          "312° NW",
+          "042° NE",
+          "118° ESE",
+          "195° SSW",
+          "270° W",
+          "340° NNW",
+        ];
+        const headingIdx = Math.min(headings.length - 1, Math.floor(prog * 8));
+        setCompassHeading(headings[headingIdx]);
+        setAirSpeed(Math.round(44 + Math.sin(prog * 20) * 8));
+      }
+    };
+
+    // Native scroll event listener so canvas never gets stuck even before libraries initialize
+    const onWindowScroll = () => {
+      if (!container) return;
+      const maxScroll = container.offsetHeight - window.innerHeight;
+      if (maxScroll <= 0) return;
+      const prog = Math.max(0, Math.min(1, window.scrollY / maxScroll));
+      handleScrollUpdate(prog);
+    };
+
+    window.addEventListener("scroll", onWindowScroll, { passive: true });
+
+    // 6. Lenis Butter-Smooth Inertia Engine
     let lenis: Lenis | null = null;
     try {
       lenis = new Lenis({
@@ -206,64 +327,31 @@ export default function CinematicScroller() {
       });
       lenisRef.current = lenis;
 
-      lenis.on("scroll", ScrollTrigger.update);
+      lenis.on("scroll", (e: { progress: number }) => {
+        handleScrollUpdate(e.progress);
+        ScrollTrigger.update();
+      });
+
       gsap.ticker.add((time) => {
         lenis?.raf(time * 1000);
       });
       gsap.ticker.lagSmoothing(0);
     } catch {
-      // Native fallback
+      // Graceful fallback to native scroll
     }
 
-    // 4. GSAP ScrollTrigger Frame Scrubber with Damped Scrub
+    // 7. GSAP ScrollTrigger Integration
     const st = ScrollTrigger.create({
       trigger: container,
       start: "top top",
       end: "bottom bottom",
-      scrub: 0.35, // Butter-smooth momentum interpolation
+      scrub: 0.25,
       onUpdate(self) {
-        const prog = self.progress;
-
-        // Advance canvas frame with instantaneous hardware draw
-        const targetFrame = Math.min(TOTAL_FRAMES - 1, Math.floor(prog * (TOTAL_FRAMES - 1)));
-        if (targetFrame !== currentFrameRef.current) {
-          currentFrameRef.current = targetFrame;
-          drawFrame(targetFrame);
-        }
-
-        // Throttle React state updates to avoid React render churn
-        const m = getMilestoneForProgress(prog);
-        const milestoneChanged = m.id !== currentMilestoneRef.current.id;
-        const progDiff = Math.abs(prog - lastStateUpdateProgRef.current);
-
-        if (milestoneChanged || progDiff > 0.003) {
-          lastStateUpdateProgRef.current = prog;
-          setProgress(prog);
-
-          if (milestoneChanged) {
-            currentMilestoneRef.current = m;
-            setCurrentMilestone(m);
-            updateAmbientLighting(prog, m);
-          }
-
-          const headings = [
-            "284° WNW",
-            "296° WNW",
-            "312° NW",
-            "042° NE",
-            "118° ESE",
-            "195° SSW",
-            "270° W",
-            "340° NNW",
-          ];
-          const headingIdx = Math.min(headings.length - 1, Math.floor(prog * 8));
-          setCompassHeading(headings[headingIdx]);
-          setAirSpeed(Math.round(44 + Math.sin(prog * 20) * 8));
-        }
+        handleScrollUpdate(self.progress);
       },
     });
 
-    // 5. Keyboard Navigation Shortcuts (Arrow keys, Space, PageUp, PageDown)
+    // 8. Keyboard Navigation
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!containerRef.current) return;
       const totalHeight = containerRef.current.offsetHeight - window.innerHeight;
@@ -292,7 +380,11 @@ export default function CinematicScroller() {
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+      window.removeEventListener("scroll", onWindowScroll);
       window.removeEventListener("keydown", handleKeyDown);
+      mediaQuery.removeEventListener("change", handleMotionChange);
+      cancelAnimationFrame(rafId);
       st.kill();
       if (lenis) lenis.destroy();
     };
@@ -329,7 +421,7 @@ export default function CinematicScroller() {
         <Preloader onComplete={handlePreloaderComplete} />
       )}
 
-      {/* Trailing Firefly Custom Cursor (Desktop only, hidden on mobile/touch) */}
+      {/* Trailing Firefly Custom Cursor */}
       <CustomCursor
         isNightScene={isNightScene}
         isGoldenHour={isGoldenHour}
@@ -343,7 +435,7 @@ export default function CinematicScroller() {
         onOpenDossier={() => setIsDossierOpen(true)}
       />
 
-      {/* Right Edge River Current SVG Progress Rail (Tablets & Desktop) */}
+      {/* Right Edge River Current SVG Progress Rail */}
       <div className="hidden sm:block">
         <ProgressRail
           progress={progress}
@@ -352,7 +444,7 @@ export default function CinematicScroller() {
         />
       </div>
 
-      {/* Luxury Expedition Seal in Bottom Right (Adaptive for mobile, tablet, desktop) */}
+      {/* Luxury Expedition Seal in Bottom Right */}
       <ExpeditionSeal
         heading={compassHeading}
         altitude={currentMilestone.altitude}
@@ -369,15 +461,15 @@ export default function CinematicScroller() {
         onClose={() => setIsDossierOpen(false)}
       />
 
-      {/* Fullscreen Master Screen - Fixed to dynamic viewport across all device aspect ratios */}
+      {/* Fullscreen Master Screen - Fixed to dynamic viewport */}
       <div className="fixed inset-0 h-[100dvh] w-full overflow-hidden select-none z-10">
-        {/* High-Performance Canvas Scrubber: Instantaneous 60-120fps hardware draw, zero video seek latency */}
+        {/* Apple-Level Smooth Hardware Canvas Scroller */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full object-cover pointer-events-none brightness-[0.98] contrast-[1.03]"
         />
 
-        {/* Dynamic Color Grade Vignette Overlay (warms up during sunset, biolum during night) */}
+        {/* Dynamic Color Grade Vignette Overlay */}
         <div
           className="absolute inset-0 pointer-events-none transition-colors duration-700"
           style={{
@@ -389,7 +481,7 @@ export default function CinematicScroller() {
           }}
         />
 
-        {/* Corner Depth Vignette to guarantee pristine aesthetics in bottom-right corner */}
+        {/* Corner Depth Vignette */}
         <div className="absolute bottom-0 right-0 w-64 sm:w-96 h-48 sm:h-64 bg-gradient-to-tl from-[#0A0F0A]/90 via-[#0A0F0A]/40 to-transparent pointer-events-none" />
 
         {/* Film Grain Texture */}
@@ -413,7 +505,7 @@ export default function CinematicScroller() {
           </div>
         )}
 
-        {/* Kinetic Typography Layer: Responsive margins and padding across all screen sizes */}
+        {/* Kinetic Typography Layer */}
         <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none px-4 sm:px-8 md:px-16 lg:px-20 py-16 sm:py-20 md:py-24">
           {/* Top Telemetry Flight Ribbon */}
           <div className="w-full flex items-center justify-between text-[9px] sm:text-xs font-mono tracking-widest text-[#F7F4EC]/60 border-b border-[#F7F4EC]/10 pb-2 sm:pb-3">
@@ -439,7 +531,7 @@ export default function CinematicScroller() {
             </div>
           </div>
 
-          {/* Center: Dynamic Kinetic Milestones Overlay with Framer Motion AnimatePresence */}
+          {/* Center: Dynamic Kinetic Milestones Overlay */}
           <div className="relative w-full max-w-4xl mx-auto my-auto flex flex-col items-center justify-center text-center px-2">
             <AnimatePresence>
               <motion.div
@@ -477,7 +569,7 @@ export default function CinematicScroller() {
                   </div>
                 )}
 
-                {/* Milestone Details Tags (Fluid wrapping on small screens) */}
+                {/* Milestone Details Tags */}
                 <div className="flex flex-wrap justify-center items-center gap-1.5 sm:gap-3 pt-1.5 sm:pt-3 text-[9px] sm:text-[11px] font-mono text-[#F7F4EC]/65 max-w-xs sm:max-w-2xl mx-auto">
                   {currentMilestone.details.map((d, i) => (
                     <div
@@ -553,7 +645,7 @@ export default function CinematicScroller() {
               })}
             </div>
 
-            {/* Right HUD Sector Progress (Visible on tablet/desktop) */}
+            {/* Right HUD Sector Progress */}
             <div className="hidden md:block text-right space-y-0.5">
               <div className="text-[#F7F4EC]/40 text-[9px] uppercase tracking-wider">Flight Trajectory</div>
               <div className="text-[#F7F4EC] font-mono">
@@ -567,10 +659,10 @@ export default function CinematicScroller() {
         </div>
       </div>
 
-      {/* Virtual Scroll Track (10,500px for smooth 80-second scrub) */}
+      {/* Hero Tall Scroll Area (h-[500vh] for luxurious, Apple-level smooth scrubbing) */}
       <div
         ref={containerRef}
-        className="relative w-full h-[10500px] pointer-events-none"
+        className="relative w-full h-[500vh] pointer-events-none"
       />
     </>
   );

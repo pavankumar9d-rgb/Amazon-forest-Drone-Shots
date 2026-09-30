@@ -67,4 +67,5 @@ scratch_*
 *.jpg
 *.webp
 !public/frames/*.webp
+!public/frames/*.png
 
